@@ -51,3 +51,27 @@ jobs:
           export INSIGHT_ORDER_CREATION_DATE_FROM=$(date -u -d 'yesterday' +%Y-%m-%d)
           export INSIGHT_ORDER_CREATION_DATE_TO=$(date -u +%Y-%m-%d)
           python src/connector.py
+
+      - name: Run connector with custom Insight date 08-29-2025
+        env:
+          # ...existing secrets...
+          INSIGHT_ORDER_CREATION_DATE_FROM: "2025-08-29"
+          INSIGHT_ORDER_CREATION_DATE_TO: "2025-08-29"
+        run: |
+          python src/connector.py
+
+      - name: Run connector with custom Insight date 09-03-2025
+        env:
+          # ...existing secrets...
+          INSIGHT_ORDER_CREATION_DATE_FROM: "2025-09-03"
+          INSIGHT_ORDER_CREATION_DATE_TO: "2025-09-03"
+        run: |
+          python src/connector.py
+
+      - name: Run connector with custom Insight date 09-05-2025
+        env:
+          # ...existing secrets...
+          INSIGHT_ORDER_CREATION_DATE_FROM: "2025-09-05"
+          INSIGHT_ORDER_CREATION_DATE_TO: "2025-09-05"
+        run: |
+          python src/connector.py
