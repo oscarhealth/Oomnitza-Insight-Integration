@@ -1,6 +1,10 @@
 name: Insight Sync
 
 on:
+  schedule:
+    - cron: '0 5 * * *'
+  push:
+    branches: [ main, master ]
   workflow_dispatch:
     inputs:
       start_date:
@@ -12,10 +16,10 @@ on:
         required: false
         type: string
       test_mode:
-        description: 'Run in test mode (no upload to Oomnitza)'
+        description: 'Run in test mode (no upload to Oomnitza). Accepts: true/false, 1/0, yes/no, on/off'
         required: false
-        type: boolean
-        default: false
+        type: string
+        default: 'false'
 
 jobs:
   run:
@@ -71,9 +75,11 @@ PY
           INSIGHT_TRACKING_DATA: ${{ secrets.INSIGHT_TRACKING_DATA }}
           INSIGHT_ORDER_CREATION_DATE_FROM: ${{ steps.dates.outputs.DATE_FROM }}
           INSIGHT_ORDER_CREATION_DATE_TO: ${{ steps.dates.outputs.DATE_TO }}
+        shell: bash
         run: |
+          TM='${{ inputs.test_mode }}'
           ARGS=""
-          if [ "${{ inputs.test_mode }}" = "true" ]; then
+          if echo "${TM}" | grep -qiE '^(1|true|yes|on)$'; then
             ARGS="--testmode"
           fi
           python connector.py upload insight --ini config.ini $ARGS
