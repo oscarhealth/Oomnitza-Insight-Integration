@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# Calculate date range for last 30 days
+DATE_FROM=$(date -v -30d '+%Y-%m-%d' 2>/dev/null || date -d '30 days ago' '+%Y-%m-%d')
+DATE_TO=$(date '+%Y-%m-%d')
+
+echo "================================================"
+echo "Oomnitza-Insight 30-Day Sync"
+echo "================================================"
+echo "Date Range: $DATE_FROM to $DATE_TO"
+echo "================================================"
+echo ""
+
+# Set environment variables - REPLACE WITH YOUR ACTUAL CREDENTIALS
+export OOMNITZA_URL="https://yourinstance.oomnitza.com"
+export OOMNITZA_API_TOKEN="your_oomnitza_api_token_here"
+export INSIGHT_CLIENT_ID="your_insight_client_id_here"
+export INSIGHT_CLIENT_KEY="your_insight_client_key_here"
+export INSIGHT_CLIENT_SECRET="your_insight_client_secret_here"
+export INSIGHT_URL="https://insight-prod.apigee.net/GetStatus"
+export INSIGHT_ORDER_CREATION_DATE_FROM="$DATE_FROM"
+export INSIGHT_ORDER_CREATION_DATE_TO="$DATE_TO"
+
+echo "Starting sync..."
+echo ""
+
+# Run the connector
+./venv/bin/python connector.py upload insight
+
+echo ""
+echo "================================================"
+echo "Sync completed!"
+echo "================================================"
