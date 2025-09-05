@@ -1,33 +1,35 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Local helper to run a 30-day sync. Do NOT commit secrets here.
+# Prefer GitHub Actions with repository secrets.
 
-# Calculate date range for last 30 days
-DATE_FROM=$(date -v -30d '+%Y-%m-%d' 2>/dev/null || date -d '30 days ago' '+%Y-%m-%d')
-DATE_TO=$(date '+%Y-%m-%d')
+set -euo pipefail
 
-echo "================================================"
-echo "Oomnitza-Insight 30-Day Sync"
-echo "================================================"
-echo "Date Range: $DATE_FROM to $DATE_TO"
-echo "================================================"
-echo ""
+# Configure via environment variables before running:
+#   export OOMNITZA_URL="https://<instance>.oomnitza.com"
+#   export OOMNITZA_API_TOKEN="<oomnitza_api_token>"
+#   export INSIGHT_CLIENT_ID="<insight_client_id>"
+#   export INSIGHT_CLIENT_KEY="<insight_client_key>"
+#   export INSIGHT_CLIENT_SECRET="<insight_client_secret>"
+#   export INSIGHT_URL="https://insight-prod.apigee.net/GetStatus"
 
-# Set environment variables
-export OOMNITZA_URL="https://oscarhealth-dev.oomnitza.com"
-export OOMNITZA_API_TOKEN="d0b7bfd7f42441439cef4c1f832a75a1"
-export INSIGHT_CLIENT_ID="9668126"
-export INSIGHT_CLIENT_KEY="Vyim102tJZNg2kDhjXSWHa9Ml9OQROU5"
-export INSIGHT_CLIENT_SECRET="D8q6tn30lIgmhZKZ"
-export INSIGHT_URL="https://insight-prod.apigee.net/GetStatus"
-export INSIGHT_ORDER_CREATION_DATE_FROM="$DATE_FROM"
-export INSIGHT_ORDER_CREATION_DATE_TO="$DATE_TO"
+: "${OOMNITZA_URL:?Set OOMNITZA_URL}"
+: "${OOMNITZA_API_TOKEN:?Set OOMNITZA_API_TOKEN}"
+: "${INSIGHT_CLIENT_ID:?Set INSIGHT_CLIENT_ID}"
+: "${INSIGHT_CLIENT_KEY:?Set INSIGHT_CLIENT_KEY}"
+: "${INSIGHT_CLIENT_SECRET:?Set INSIGHT_CLIENT_SECRET}"
+: "${INSIGHT_URL:?Set INSIGHT_URL}"
 
-echo "Starting sync..."
-echo ""
+# Date range (defaults to previous 30 days)
+START_DATE=${INSIGHT_ORDER_CREATION_DATE_FROM:-$(date -u -d '30 days ago' +%F 2>/dev/null || python - <<'PY'
+import datetime; print((datetime.datetime.utcnow()-datetime.timedelta(days=30)).date().isoformat())
+PY
+)}
+END_DATE=${INSIGHT_ORDER_CREATION_DATE_TO:-$(date -u +%F 2>/dev/null || python - <<'PY'
+import datetime; print(datetime.datetime.utcnow().date().isoformat())
+PY
+)}
 
-# Run the connector
-./venv/bin/python connector.py upload insight
+export INSIGHT_ORDER_CREATION_DATE_FROM="$START_DATE"
+export INSIGHT_ORDER_CREATION_DATE_TO="$END_DATE"
 
-echo ""
-echo "================================================"
-echo "Sync completed!"
-echo "================================================"
+python connector.py upload insight --ini config.ini "$@"

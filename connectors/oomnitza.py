@@ -26,6 +26,15 @@ class Connector(BaseConnector):
         """Initialize the connector."""
         self._csrf_token = None
         super(Connector, self).__init__(section, settings)
+
+        # Allow env var override to avoid storing secrets in config.ini
+        env_url = os.getenv('OOMNITZA_URL')
+        if env_url:
+            self.settings['url'] = env_url
+        env_token = os.getenv('OOMNITZA_API_TOKEN')
+        if env_token:
+            self.settings['api_token'] = env_token
+
         self.authenticate()
 
     def _extract_csrf_token(self, response):

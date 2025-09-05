@@ -26,8 +26,9 @@ A serverless data connector that automatically syncs asset procurement data from
 #### 1. Fork or Clone This Repository
 
 ```bash
-git clone https://github.com/oscar-melvin/Oomnitza-Insight-Integration.git
-cd Oomnitza-Insight-Integration
+# Replace with your repository URL
+git clone https://github.com/your-org/your-repo.git
+cd your-repo
 ```
 
 #### 2. Configure GitHub Secrets
@@ -37,15 +38,17 @@ Navigate to your repository's **Settings** > **Secrets and variables** > **Actio
 | Secret Name | Description | Example |
 |-------------|-------------|---------|
 | `OOMNITZA_URL` | Your Oomnitza instance URL | `https://yourcompany.oomnitza.com` |
-| `OOMNITZA_API_TOKEN` | Oomnitza API token | `d0b7bfd7f42441439cef4c1f832a75a1` |
+| `OOMNITZA_API_TOKEN` | Oomnitza API token | `<oomnitza_api_token>` |
 | `INSIGHT_URL` | Insight API endpoint | `https://insight-prod.apigee.net/GetStatus` |
-| `INSIGHT_CLIENT_ID` | Your Insight client ID | `9668126` |
-| `INSIGHT_CLIENT_KEY` | Insight API key | `Vyim102tJZNg2kDhjXSWHa9Ml9OQROU5` |
-| `INSIGHT_CLIENT_SECRET` | Insight API secret | `D8q6tn30lIgmhZKZ` |
+| `INSIGHT_CLIENT_ID` | Your Insight client ID | `<insight_client_id>` |
+| `INSIGHT_CLIENT_KEY` | Insight API key | `<insight_client_key>` |
+| `INSIGHT_CLIENT_SECRET` | Insight API secret | `<insight_client_secret>` |
 
 Optional secrets for custom date ranges:
 - `INSIGHT_ORDER_CREATION_DATE_FROM` - Start date (YYYY-MM-DD format)
 - `INSIGHT_ORDER_CREATION_DATE_TO` - End date (YYYY-MM-DD format)
+
+> Important: Never commit secrets to the repository. Use GitHub Actions secrets only.
 
 #### 3. Enable GitHub Actions
 
@@ -128,13 +131,13 @@ For local development, you can also use the `config.ini` file:
 [oomnitza]
 enable = True
 url = https://yourinstance.oomnitza.com
-api_token = your_api_token_here
+api_token = <oomnitza_api_token>
 
 [insight]
 enable = True
-client_id = your_client_id
-client_key = your_client_key
-client_secret = your_client_secret
+client_id = <insight_client_id>
+client_key = <insight_client_key>
+client_secret = <insight_client_secret>
 insight_url = https://insight-prod.apigee.net/GetStatus
 order_creation_date_from = 2025-07-18
 order_creation_date_to = 2025-07-21
@@ -192,7 +195,7 @@ Successful sync:
 
 ## Security Best Practices
 
-1. **Credential Rotation**: Rotate API tokens every 90 days
+1. **Credential Rotation**: Rotate API tokens regularly
 2. **Access Control**: Limit repository access to authorized personnel
 3. **Audit Logs**: Regularly review GitHub Actions logs
 4. **Secret Management**: Never commit credentials to the repository
@@ -224,7 +227,7 @@ Successful sync:
 ## Support
 
 For issues or questions:
-- Check the [Issues](https://github.com/oscar-melvin/Oomnitza-Insight-Integration/issues) section
+- Check the Issues section of your repository
 - Review the logs in GitHub Actions
 - Contact your IT administrator
 

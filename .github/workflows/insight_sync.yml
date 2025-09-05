@@ -1,0 +1,88 @@
+name: Insight Sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: 'OrderCreationDateFrom (YYYY-MM-DD)'
+        required: false
+        type: string
+      end_date:
+        description: 'OrderCreationDateTo (YYYY-MM-DD)'
+        required: false
+        type: string
+      test_mode:
+        description: 'Run in test mode (no upload to Oomnitza)'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  run:
+    name: Run Insight Sync
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compute date range (defaults to previous UTC day)
+        id: dates
+        shell: bash
+        run: |
+          IN_START='${{ inputs.start_date }}'
+          IN_END='${{ inputs.end_date }}'
+          if [ -n "$IN_START" ]; then
+            DATE_FROM="$IN_START"
+          else
+            DATE_FROM=$(date -u -d "yesterday" +%F 2>/dev/null || python - <<'PY'
+import datetime; print((datetime.datetime.utcnow()-datetime.timedelta(days=1)).date().isoformat())
+PY
+)
+          fi
+          if [ -n "$IN_END" ]; then
+            DATE_TO="$IN_END"
+          else
+            DATE_TO="$DATE_FROM"
+          fi
+          echo "DATE_FROM=$DATE_FROM" >> "$GITHUB_OUTPUT"
+          echo "DATE_TO=$DATE_TO" >> "$GITHUB_OUTPUT"
+
+      - name: Run Insight sync
+        env:
+          # Oomnitza
+          OOMNITZA_URL: ${{ secrets.OOMNITZA_URL }}
+          OOMNITZA_API_TOKEN: ${{ secrets.OOMNITZA_API_TOKEN }}
+          OOMNITZA_CONNECTOR_SOURCE: gha
+          # Insight
+          INSIGHT_URL: ${{ secrets.INSIGHT_URL }}
+          INSIGHT_CLIENT_KEY: ${{ secrets.INSIGHT_CLIENT_KEY }}
+          INSIGHT_CLIENT_SECRET: ${{ secrets.INSIGHT_CLIENT_SECRET }}
+          INSIGHT_CLIENT_ID: ${{ secrets.INSIGHT_CLIENT_ID }}
+          INSIGHT_TRACKING_DATA: ${{ secrets.INSIGHT_TRACKING_DATA }}
+          INSIGHT_ORDER_CREATION_DATE_FROM: ${{ steps.dates.outputs.DATE_FROM }}
+          INSIGHT_ORDER_CREATION_DATE_TO: ${{ steps.dates.outputs.DATE_TO }}
+        run: |
+          ARGS=""
+          if [ "${{ inputs.test_mode }}" = "true" ]; then
+            ARGS="--testmode"
+          fi
+          python connector.py upload insight --ini config.ini $ARGS
+
+      - name: Archive logs (optional)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: connector-logs
+          path: |
+            info.log
+            errors.log

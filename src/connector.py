@@ -53,11 +53,19 @@ if missing_vars:
 
 logging.info("All required credentials loaded successfully.")
 
-# --- Set Insight order creation dates to yesterday ---
-yesterday = (datetime.datetime.utcnow() - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
-os.environ['INSIGHT_ORDER_CREATION_DATE_FROM'] = yesterday
-os.environ['INSIGHT_ORDER_CREATION_DATE_TO'] = yesterday
-logging.info(f"Set INSIGHT_ORDER_CREATION_DATE_FROM and TO to {yesterday}")
+# --- Set Insight order creation dates to yesterday (only if not already set) ---
+date_from_env = os.environ.get('INSIGHT_ORDER_CREATION_DATE_FROM')
+date_to_env = os.environ.get('INSIGHT_ORDER_CREATION_DATE_TO')
+
+if not date_from_env or not date_to_env:
+    yesterday = (datetime.datetime.utcnow() - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+    if not date_from_env:
+        os.environ['INSIGHT_ORDER_CREATION_DATE_FROM'] = yesterday
+    if not date_to_env:
+        os.environ['INSIGHT_ORDER_CREATION_DATE_TO'] = yesterday
+    logging.info(f"Set default INSIGHT_ORDER_CREATION_DATE_FROM and TO to {yesterday}")
+else:
+    logging.info(f"Using existing environment variables: FROM={date_from_env}, TO={date_to_env}")
 
 def get_insight_access_token(client_key, client_secret):
     """
@@ -71,7 +79,8 @@ def get_insight_access_token(client_key, client_secret):
         'Content-Type': 'application/x-www-form-urlencoded'
     }
     try:
-        resp = requests.post(token_url, headers=basic_auth_headers, data={})
+        # Disable SSL verification for testing
+        resp = requests.post(token_url, headers=basic_auth_headers, data={}, verify=False)
         resp.raise_for_status()
         data = resp.json()
         return data.get('access_token', None)
@@ -129,14 +138,67 @@ def get_insight_assets():
                 url=INSIGHT_URL,
                 json=payload,
                 headers=headers,
-                timeout=30
+                timeout=30,
+                verify=False  # Disable SSL verification for testing
             )
+            print(f"DEBUG: Response Status Code = {response.status_code}")
+            print(f"DEBUG: Response Headers = {dict(response.headers)}")
+            print(f"DEBUG: Response Text = {response.text}")
+            
             if response.status_code != 200:
                 logging.error(f"Insight API returned {response.status_code}: {response.text}")
                 break
             data = response.json()
-            # You may need to adjust this extraction based on the actual API response
-            page_assets = data.get('assets', [])
+            print(f"DEBUG: Parsed JSON Response = {json.dumps(data, indent=2)}")
+            
+            # Extract assets from the actual Insight API response structure
+            page_assets = []
+            status_response = data.get('StatusOrderResponse', [])
+            
+            for status in status_response:
+                orders = status.get('Order', [])
+                for order in orders:
+                    order_header = order.get('OrderHeader', [{}])[0]  # Get first header
+                    line_items = order.get('OrderLineItems', [])
+                    
+                    for item in line_items:
+                        # Extract serial number from delivery information if available
+                        serial_number = None
+                        deliveries = item.get('Delivery', [])
+                        for delivery in deliveries:
+                            serial_numbers = delivery.get('SerialNumbers', [])
+                            if serial_numbers:
+                                serial_number = serial_numbers[0].get('SerialNumber', '').strip()
+                                break
+                        
+                        # Only include items that have serial numbers (actual assets)
+                        if serial_number:
+                            asset_record = {
+                                'order': {
+                                    'purchaseOrderNumber': order_header.get('CustomerOrderNumber'),
+                                    'purchaseDate': order_header.get('OrderCreationDate'),
+                                    'insightOrderNumber': order_header.get('InsightOrderNumber'),
+                                    'orderStatus': order_header.get('OrderStatus')
+                                },
+                                'lineItem': {
+                                    'serialNumber': serial_number,
+                                    'unitPrice': None,  # Price info not readily available in this structure
+                                    'quantity': item.get('Quantity'),
+                                    'itemStatus': item.get('ItemStatus')
+                                },
+                                'product': {
+                                    'sku': item.get('ManufacturerSKU'),
+                                    'description': item.get('MaterialDescription'),
+                                    'manufacturer': item.get('Manufacturer'),
+                                    'materialNumber': item.get('MaterialNumber')
+                                },
+                                'trackingInfo': {
+                                    'carrier': None,  # Not available in current response
+                                    'trackingNumber': None  # Not available in current response
+                                }
+                            }
+                            page_assets.append(asset_record)
+            
             assets.extend(page_assets)
             logging.info(f"Fetched {len(page_assets)} assets from {current.strftime('%Y-%m-%d')} to {interval_end.strftime('%Y-%m-%d')}.")
         except Exception as e:
@@ -191,50 +253,82 @@ def push_to_oomnitza(asset):
     If the asset exists, update it; otherwise, create it.
     Returns True if successful, False otherwise.
     """
-    headers = {
+    # Try different authentication methods
+    headers_bearer = {
         'Authorization': f'Bearer {OOMNITZA_API_TOKEN}',
         'Content-Type': 'application/json',
         'Accept': 'application/json',
     }
+    
+    headers_apikey = {
+        'Authorization': f'Token {OOMNITZA_API_TOKEN}',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+    }
+    
+    headers_basic = {
+        'Authorization': f'Basic {OOMNITZA_API_TOKEN}',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+    }
+    
     serial = asset.get('SERIAL_NUMBER')
     if not serial:
         logging.warning("Asset missing SERIAL_NUMBER, skipping.")
         return False
-    # 1. Check if asset exists
-    search_url = f"{OOMNITZA_URL}/api/assets?serial_number={serial}"
-    try:
-        resp = requests.get(search_url, headers=headers, timeout=30)
-        if resp.status_code != 200:
-            logging.error(f"Oomnitza search failed for {serial}: {resp.status_code} {resp.text}")
-            return False
-        results = resp.json().get('assets', [])
-        if results:
-            # Update existing asset
-            asset_id = results[0].get('id')
-            if not asset_id:
-                logging.error(f"Oomnitza asset found but missing ID for serial {serial}.")
-                return False
-            update_url = f"{OOMNITZA_URL}/api/assets/{asset_id}"
-            r = requests.patch(update_url, headers=headers, json=asset, timeout=30)
-            if r.status_code in (200, 204):
-                logging.info(f"Updated asset {serial} in Oomnitza.")
-                return True
+    
+    # Try different authentication methods
+    auth_methods = [
+        ("Bearer", headers_bearer),
+        ("Token", headers_apikey), 
+        ("Basic", headers_basic)
+    ]
+    
+    for auth_name, headers in auth_methods:
+        logging.info(f"Trying {auth_name} authentication for {serial}")
+        # 1. Check if asset exists
+        search_url = f"{OOMNITZA_URL}/api/assets?serial_number={serial}"
+        try:
+            resp = requests.get(search_url, headers=headers, timeout=30, verify=False)
+            if resp.status_code == 200:
+                logging.info(f"{auth_name} authentication successful!")
+                results = resp.json().get('assets', [])
+                if results:
+                    # Update existing asset
+                    asset_id = results[0].get('id')
+                    if not asset_id:
+                        logging.error(f"Oomnitza asset found but missing ID for serial {serial}.")
+                        return False
+                    update_url = f"{OOMNITZA_URL}/api/assets/{asset_id}"
+                    r = requests.patch(update_url, headers=headers, json=asset, timeout=30, verify=False)
+                    if r.status_code in (200, 204):
+                        logging.info(f"Updated asset {serial} in Oomnitza.")
+                        return True
+                    else:
+                        logging.error(f"Failed to update asset {serial}: {r.status_code} {r.text}")
+                        return False
+                else:
+                    # Create new asset
+                    create_url = f"{OOMNITZA_URL}/api/assets"
+                    r = requests.post(create_url, headers=headers, json=asset, timeout=30, verify=False)
+                    if r.status_code in (200, 201):
+                        logging.info(f"Created asset {serial} in Oomnitza.")
+                        return True
+                    else:
+                        logging.error(f"Failed to create asset {serial}: {r.status_code} {r.text}")
+                        return False
+            elif resp.status_code == 401:
+                logging.warning(f"{auth_name} authentication failed: {resp.status_code} {resp.text}")
+                continue  # Try next auth method
             else:
-                logging.error(f"Failed to update asset {serial}: {r.status_code} {r.text}")
+                logging.error(f"Oomnitza search failed for {serial} with {auth_name}: {resp.status_code} {resp.text}")
                 return False
-        else:
-            # Create new asset
-            create_url = f"{OOMNITZA_URL}/api/assets"
-            r = requests.post(create_url, headers=headers, json=asset, timeout=30)
-            if r.status_code in (200, 201):
-                logging.info(f"Created asset {serial} in Oomnitza.")
-                return True
-            else:
-                logging.error(f"Failed to create asset {serial}: {r.status_code} {r.text}")
-                return False
-    except requests.RequestException as e:
-        logging.error(f"Oomnitza API error for {serial}: {e}")
-        return False
+        except requests.RequestException as e:
+            logging.error(f"Oomnitza API error for {serial} with {auth_name}: {e}")
+            continue  # Try next auth method
+    
+    logging.error(f"All authentication methods failed for {serial}")
+    return False
 
 def test_env_var_types():
     print("TEST: INSIGHT_CLIENT_KEY type:", type(INSIGHT_CLIENT_KEY), "value:", INSIGHT_CLIENT_KEY)
