@@ -3,6 +3,15 @@ name: Oomnitza Insight Integration
 on:
   push:
   workflow_dispatch:
+    inputs:
+      insight_order_creation_date_from:
+        description: 'Order Creation Date From (YYYY-MM-DD)'
+        required: false
+        default: ''
+      insight_order_creation_date_to:
+        description: 'Order Creation Date To (YYYY-MM-DD)'
+        required: false
+        default: ''
   schedule:
     - cron: '0 6 * * *' # Runs daily at 2am Eastern Time (ET is UTC-4 in July)
 
@@ -29,14 +38,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libldap2-dev libsasl2-dev
       - name: Install dependencies
         run: pip install -r requirements.txt
-      # - name: Run connector
-      #   run: python src/connector.py
-      #   (Original block commented out for dynamic date automation)
-      
-      # --- New block: Run connector with dynamic date range for Insight integration ---
-      - name: Run connector with dynamic Insight date range
-        # This step dynamically sets the date range for INSIGHT_ORDER_CREATION_DATE_FROM and TO
-        # so you never have to update the workflow manually. It sets FROM to yesterday and TO to today (UTC).
+      - name: Run connector with manual or default date range
         env:
           OOMNITZA_URL: ${{ secrets.OOMNITZA_URL }}
           OOMNITZA_API_TOKEN: ${{ secrets.OOMNITZA_API_TOKEN }}
@@ -47,7 +49,15 @@ jobs:
           INSIGHT_URL: ${{ secrets.INSIGHT_URL }}
           INSIGHT_ENABLED: "True"
         run: |
-          # Set date range: FROM = yesterday, TO = today (UTC)
-          export INSIGHT_ORDER_CREATION_DATE_FROM=$(date -u -d 'yesterday' +%Y-%m-%d)
-          export INSIGHT_ORDER_CREATION_DATE_TO=$(date -u +%Y-%m-%d)
+          # Set date range from workflow_dispatch inputs if provided, else use yesterday/today
+          if [[ -n "${{ github.event.inputs.insight_order_creation_date_from }}" ]]; then
+            export INSIGHT_ORDER_CREATION_DATE_FROM="${{ github.event.inputs.insight_order_creation_date_from }}"
+          else
+            export INSIGHT_ORDER_CREATION_DATE_FROM=$(date -u -d 'yesterday' +%Y-%m-%d)
+          fi
+          if [[ -n "${{ github.event.inputs.insight_order_creation_date_to }}" ]]; then
+            export INSIGHT_ORDER_CREATION_DATE_TO="${{ github.event.inputs.insight_order_creation_date_to }}"
+          else
+            export INSIGHT_ORDER_CREATION_DATE_TO=$(date -u +%Y-%m-%d)
+          fi
           python src/connector.py
