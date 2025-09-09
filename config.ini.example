@@ -1,0 +1,152 @@
+[oomnitza]
+enable = True
+url = https://yourinstance.oomnitza.com
+api_token = your_oomnitza_api_token_here
+
+[insight]
+enable = True
+client_id = your_insight_client_id
+client_key = your_insight_client_key
+client_secret = your_insight_client_secret
+order_creation_date_from = 
+order_creation_date_to = 
+tracking_data = True
+insight_url = https://insight-prod.apigee.net/GetStatus
+
+[managed.1]
+enable = False
+saas_authorization =
+oomnitza_authorization =
+local_inputs =
+test_run = False
+is_custom = False
+
+[chef]
+enable = False
+url =
+client =
+key_file =
+attribute_extension =
+
+[csv_assets]
+enable = False
+filename =
+directory =
+sync_field =
+
+[csv_users]
+enable = False
+filename =
+directory =
+default_role =
+default_position =
+sync_field =
+
+[jasper]
+enable = False
+wsdl_path =
+username =
+password =
+api_token =
+storage =
+
+[ldap]
+enable = False
+url =
+username =
+password =
+base_dn =
+group_dn =
+protocol_version =
+filter =
+default_role =
+default_position =
+page_criterium =
+groups_dn =
+group_members_attr =
+group_member_filter =
+
+[ldap_assets]
+enable = False
+url =
+username =
+password =
+base_dn =
+group_dn =
+protocol_version =
+filter =
+page_criterium =
+groups_dn =
+group_members_attr =
+group_member_filter =
+sync_field =
+
+[mobileiron]
+enable = False
+url =
+username =
+password =
+partitions =
+api_version =
+include_checkin_devices_only =
+last_checkin_date_threshold =
+
+[netbox]
+enable = False
+url =
+auth_token =
+
+[open_audit]
+enable = False
+url =
+username =
+password =
+
+[sccm]
+enable = False
+server =
+database =
+username =
+password =
+authentication =
+driver =
+
+[tanium]
+enable = False
+url =
+username =
+password =
+session_token =
+domain =
+view =
+
+[vcenter]
+enable = False
+url =
+username =
+password =
+use_legacy_apis =
+
+[workspaceone_devicesoftware]
+enable = False
+client_id =
+client_secret =
+subdomain =
+region =
+
+[munki_report]
+enable = False
+url =
+username =
+password =
+db_columns =
+
+[dell_asset_order_status]
+enable = False
+client_id =
+client_secret =
+is_dp_id =
+is_po_numbers =
+is_order_no_country_code =
+values =
+country_code =

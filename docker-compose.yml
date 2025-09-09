@@ -1,0 +1,32 @@
+version: "3"
+
+services:
+  oomnitza-connector:
+    image: oomnitza/oomnitza-connector:latest
+    env_file:
+      - .env
+    command: ["managed"]
+    # volumes:
+    #   - /path/config.ini:/app/config.ini
+  oomnitza-connector-managed-ini:
+    image: oomnitza/oomnitza-connector:latest
+    #env_file:
+    #  - .env
+    command: ["managed", "ini_only"]
+    volumes:
+      - /path/config.ini:/app/config.ini
+  oomnitza-connector-ldap:
+    image: oomnitza/oomnitza-connector:latest
+    env_file:
+      - .env
+    command: ["upload", "ldap"]
+    # volumes:
+    #   - /path/config.ini:/app/config.ini
+
+  oomnitza-connector-ldap-ini:
+    image: oomnitza/oomnitza-connector:latest
+    #env_file:
+    #  - .env
+    command: ["upload", "ldap", "ini_only"]
+    volumes:
+      - /path/config.ini:/app/config.ini

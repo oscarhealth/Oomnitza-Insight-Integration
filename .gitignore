@@ -1,0 +1,111 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.venv/
+.env
+.env.*
+.secrets
+
+# Credential files - NEVER COMMIT THESE
+setup_env.sh
+*credentials*
+*secrets*
+*.key
+*.pem
+*.cert
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+debug.log
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# mypy
+.mypy_cache/
+.dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+*.log*
+
+# IDEs
+.idea/
+.vscode/
+
+# Config files with secrets
+config.ini
+config.ini*
+!config.ini.example
+!docker/config.ini.envsubst
+
+# Data files
+save_data/*
+*.pem
+*.sqlite
+
+# Source files (keeping only the main connector)
+src/*
+
+# Compiled Python files
+*.py[cod]
+__pycache__/
+*.pyc
+config.ini

@@ -1,0 +1,117 @@
+name: Oomnitza Insight Integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      insight_order_creation_date_from:
+        description: 'Order Creation Date From (YYYY-MM-DD)'
+        required: false
+        default: ''
+        type: string
+      insight_order_creation_date_to:
+        description: 'Order Creation Date To (YYYY-MM-DD)'
+        required: false
+        default: ''
+        type: string
+      test_mode:
+        description: 'Run in test mode (no upload to Oomnitza)'
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    - cron: '0 6 * * *' # Runs daily at 6:00 AM UTC
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15  # Overall job timeout - kills job if it takes longer than 15 minutes
+    env:
+      OOMNITZA_URL: ${{ secrets.OOMNITZA_URL }}
+      OOMNITZA_API_TOKEN: ${{ secrets.OOMNITZA_API_TOKEN }}
+      INSIGHT_CLIENT_ID: ${{ secrets.INSIGHT_CLIENT_ID }}
+      INSIGHT_CLIENT_KEY: ${{ secrets.INSIGHT_CLIENT_KEY }}
+      INSIGHT_CLIENT_SECRET: ${{ secrets.INSIGHT_CLIENT_SECRET }}
+      INSIGHT_URL: ${{ secrets.INSIGHT_URL }}
+      INSIGHT_TRACKING_DATA: ${{ secrets.INSIGHT_TRACKING_DATA }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install OpenLDAP development libraries
+        timeout-minutes: 3
+        run: sudo apt-get update && sudo apt-get install -y libldap2-dev libsasl2-dev
+      - name: Install dependencies
+        timeout-minutes: 5
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Compute date range (defaults to previous UTC day)
+        id: dates
+        shell: bash
+        run: |
+          IN_START="${{ github.event.inputs.insight_order_creation_date_from }}"
+          IN_END="${{ github.event.inputs.insight_order_creation_date_to }}"
+          if [ -n "$IN_START" ]; then
+            DATE_FROM="$IN_START"
+          else
+            DATE_FROM=$(date -u -d "yesterday" +%F)
+          fi
+          if [ -n "$IN_END" ]; then
+            DATE_TO="$IN_END"
+          else
+            DATE_TO="$DATE_FROM"
+          fi
+          echo "DATE_FROM=$DATE_FROM" >> "$GITHUB_OUTPUT"
+          echo "DATE_TO=$DATE_TO" >> "$GITHUB_OUTPUT"
+      - name: Create config.ini
+        run: |
+          cat > config.ini << 'EOF'
+          [oomnitza]
+          enable = True
+          url = placeholder
+          api_token = placeholder
+
+          [insight]
+          enable = True
+          client_id = placeholder
+          client_key = placeholder
+          client_secret = placeholder
+          order_creation_date_from = 
+          order_creation_date_to = 
+          tracking_data = 
+          insight_url = placeholder
+          EOF
+      - name: Run connector (manual or scheduled)
+        timeout-minutes: 10  # Main sync step timeout
+        env:
+          # Oomnitza
+          OOMNITZA_URL: ${{ secrets.OOMNITZA_URL }}
+          OOMNITZA_API_TOKEN: ${{ secrets.OOMNITZA_API_TOKEN }}
+          OOMNITZA_CONNECTOR_SOURCE: gha
+          # Insight
+          INSIGHT_URL: ${{ secrets.INSIGHT_URL }}
+          INSIGHT_CLIENT_KEY: ${{ secrets.INSIGHT_CLIENT_KEY }}
+          INSIGHT_CLIENT_SECRET: ${{ secrets.INSIGHT_CLIENT_SECRET }}
+          INSIGHT_CLIENT_ID: ${{ secrets.INSIGHT_CLIENT_ID }}
+          INSIGHT_TRACKING_DATA: ${{ secrets.INSIGHT_TRACKING_DATA }}
+          INSIGHT_ORDER_CREATION_DATE_FROM: ${{ steps.dates.outputs.DATE_FROM }}
+          INSIGHT_ORDER_CREATION_DATE_TO: ${{ steps.dates.outputs.DATE_TO }}
+        shell: bash
+        run: |
+          ARGS=""
+          if [ "${{ github.event.inputs.test_mode }}" = "true" ]; then
+            ARGS="--testmode"
+          fi
+          # Use the official connector runner (src/connector.py is deprecated)
+          python connector.py upload insight --ini config.ini $ARGS
+      - name: Archive logs (optional)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: connector-logs
+          path: |
+            info.log
+            errors.log

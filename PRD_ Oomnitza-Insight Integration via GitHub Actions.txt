@@ -1,0 +1,578 @@
+﻿1. Product Requirements Document: Oomnitza-Insight Integration
+Feature Name
+	Automated Insight to Oomnitza Data Connector
+	Stakeholders
+	IT Asset Management, IT Operations, Security Team
+	Date
+	July 18, 2025
+	Status
+	Draft
+	2. Introduction & Problem Statement
+2.1. The Ask
+We need to establish an automated data pipeline that feeds hardware and software license procurement data from our vendor, Insight, directly into our Oomnitza Asset Management platform.
+
+
+2.2. Business Context & Problem
+Currently, asset data from Insight purchases is manually tracked and entered into Oomnitza. This process is inefficient, prone to human error, and results in significant delays between asset acquisition and its appearance in our management system. This data lag hinders our ability to accurately track assets, manage inventory, and provision hardware for new and existing employees efficiently.
+
+
+2.3. Proposed Solution
+We will implement the official Oomnitza Insight Connector using a modern, serverless CI/CD approach with GitHub Actions. This eliminates the need for a dedicated local server, as suggested in the basic integration guide, leading to a more secure, reliable, and maintenance-free solution. The GitHub Actions workflow will execute a Python script on a daily schedule to fetch data from Insight and push it to Oomnitza automatically.
+
+
+3. Goals & Objectives
+The primary goal is to create a fully automated, reliable, and secure data pipeline. Success will be measured by achieving the following objectives:
+* Automation: Completely eliminate manual data entry for Insight purchases.
+* Efficiency: Reduce the time from asset purchase to its registration in Oomnitza to less than 24 hours.
+* Data Integrity: Improve the accuracy of asset data by removing the risk of manual input errors.
+* Security: Ensure all API credentials for Insight and Oomnitza are stored securely and are never exposed in code or logs.
+* Cost-Effectiveness: Implement a solution with zero server management overhead and minimal to no direct financial cost, leveraging existing GitHub capabilities.
+4. Scope
+4.1. In Scope
+* Configuration of a dedicated GitHub repository for the integration code.
+* Adaptation of the Oomnitza-provided Python connector script to run in a headless environment and read credentials from environment variables.
+* Secure storage of all API keys, tokens, and URLs using GitHub Encrypted Secrets.
+* Creation of a GitHub Actions workflow (.yml file) that defines the setup, dependency installation, and execution of the Python script.
+* Scheduling the workflow to run automatically once every 24 hours.
+* Enabling the ability to trigger the sync process manually via the GitHub Actions UI for on-demand updates.
+* Utilizing the native logging within GitHub Actions for basic monitoring and troubleshooting.
+4.2. Out of Scope
+* Development of a new integration connector from scratch.
+* Integration of any other vendors or data sources.
+* Building a custom monitoring dashboard or alerting system beyond what GitHub Actions provides by default.
+* Any modifications to the Oomnitza or Insight platforms or their APIs.
+* Real-time or near-real-time data synchronization (the requirement is for a daily batch process).
+5. Requirements
+5.1. Functional Requirements
+ID
+	Requirement
+	FR-1
+	The system must authenticate with the Insight API using stored credentials to fetch asset data.
+	FR-2
+	The system must transform the fetched data into the format required by the Oomnitza API.
+	FR-3
+	The system must authenticate with the Oomnitza API and push the transformed asset data to the correct instance.
+	FR-4
+	The entire data sync process must be triggered automatically on a recurring 24-hour schedule.
+	FR-5
+	A user with appropriate repository permissions must be able to trigger the data sync process manually from the GitHub UI.
+	FR-6
+	The system must log the start, end, and success or failure status of each run in the GitHub Actions console.
+	NFR-1
+	Security: All credentials (API keys, tokens, URLs) must be stored as GitHub Encrypted Secrets and injected as environment variables at runtime. They must not be hardcoded or stored in plain text.
+	NFR-2
+	Reliability: The workflow must have a success rate of >99% for scheduled runs, assuming external APIs are available.
+	NFR-3
+	Maintainability: The solution must be self-contained within a single GitHub repository. The Python script and YAML workflow must be well-commented to facilitate future updates.
+	NFR-4
+	Usability: The process for a manual run must be straightforward, requiring only a few clicks in the GitHub UI.
+	
+
+6. Implementation Plan: GitHub Actions
+The integration will be built using the following components:
+* Source Repository: A private GitHub repository will house the connector.py script, requirements.txt, and the workflow file.
+* Secrets Management: All credentials will be stored under Settings > Secrets and variables > Actions.
+* Workflow (.github/workflows/oomnitza-sync.yml):
+   * Triggers: The workflow will be configured to run on a schedule (daily cron job) and on workflow_dispatch (for manual runs).
+   * Runner: The job will use a standard ubuntu-latest GitHub-hosted runner.
+   * Job Steps:
+      1. Checkout Code: Use actions/checkout@v4 to access the connector script.
+      2. Set up Python: Use actions/setup-python@v5 to create a consistent Python environment.
+      3. Install Dependencies: Run pip install -r requirements.txt to install the requests library and any others needed.
+      4. Execute Script: Run python connector.py. The env block in this step will map the GitHub secrets to the environment variables that the script expects.
+7. Success Metrics & Acceptance Criteria
+The project will be considered "done" and successful when the following criteria are met:
+* The GitHub Actions workflow runs to completion automatically every day without errors.
+* Asset records from Insight purchases are verifiably created or updated in Oomnitza within 24 hours of a successful sync.
+* A review of the repository confirms that no secrets are present in the code or commit history.
+* A designated user can successfully trigger a manual sync and verify its completion in the Actions log.
+
+
+
+
+Implementation Guide: Automated Insight to Oomnitza Data Connector via GitHub Actions
+
+
+This document provides a comprehensive, step-by-step technical guide for implementing the automated data pipeline between Insight and Oomnitza, as specified in the Product Requirements Document (PRD).1 The objective is to construct a secure, reliable, and serverless solution leveraging GitHub Actions to eliminate manual data entry and improve IT asset management efficiency. This guide is intended for the technical team responsible for the implementation, including DevOps engineers and IT automation specialists.
+
+
+Section 1: Project Foundation and Security Posture
+
+
+The initial phase of this project focuses on establishing a secure and well-organized foundation. A correctly configured repository and robust secrets management strategy are paramount to fulfilling the non-functional requirements for security (NFR-1) and maintainability (NFR-3) from the outset.1
+
+
+1.1 Creating the Private GitHub Repository
+
+
+The first and most fundamental step in securing the integration's intellectual property is to house the code in a private GitHub repository. This ensures that the connector logic is not publicly exposed, providing a baseline of security even before sensitive credentials are managed.2
+The repository will be created using the GitHub web interface, which provides a straightforward and auditable process.3
+Procedure:
+1. Navigate to GitHub and log in to the appropriate organizational account.
+2. In the upper-right corner, select the + icon, then click New repository.3
+3. Repository Name: Enter a descriptive name, such as oomnitza-insight-connector.
+4. Description: Provide a brief summary, for example: "Serverless data connector to sync asset procurement data from Insight to Oomnitza via GitHub Actions."
+5. Visibility: Select Private. This is a critical security step. Making a repository private ensures that public forks are detached and features like GitHub Pages are disabled by default, preventing accidental data exposure.2
+6. Initialize Repository: Check the following boxes:
+   * Add a README file: To provide a home for project documentation.
+   * Add.gitignore: Select the Python template from the dropdown menu. This will pre-populate the file with rules to ignore common Python artifacts like __pycache__ directories, virtual environment folders, and compiled files, keeping the commit history clean.
+   * Choose a license: Select an appropriate license, such as the MIT License.
+7. Click Create repository to finalize the setup.3
+
+
+1.2 Establishing the Project Directory Structure
+
+
+A logical and standardized directory structure is essential for long-term maintainability (NFR-3).1 It ensures that new team members can quickly understand the project layout and that automation scripts can reliably locate necessary files.
+The following structure should be created within the repository:
+
+
+
+
+
+
+oomnitza-insight-connector/
+├──.github/
+│   └── workflows/
+│       └── oomnitza-sync.yml
+├── src/
+│   └── connector.py
+├──.gitignore
+├── README.md
+└── requirements.txt
+
+Rationale for this Structure:
+* .github/workflows/: This is the mandatory location for all GitHub Actions workflow files. It cleanly separates the automation and orchestration logic from the application code.6
+* src/: This directory will contain the core Python application logic (connector.py), isolating it from repository configuration files at the root level.
+* requirements.txt: Placing this at the root makes it easy to find and for the GitHub Actions workflow to access when installing dependencies.
+
+
+1.3 Configuring GitHub Encrypted Secrets
+
+
+The most critical security requirement (NFR-1) is that no credentials, API keys, or tokens are ever hardcoded or stored in plain text within the repository.1 GitHub Actions Secrets provide a secure mechanism for storing this sensitive information. These secrets are encrypted environment variables that are only decrypted and made available to the workflow at runtime.7
+Recent security incidents have increasingly targeted CI/CD systems to compromise credentials and inject malicious code into the software supply chain.8 Therefore, the management of these secrets must be treated with the utmost care. GitHub encrypts secrets using Libsodium sealed boxes before they are stored and automatically redacts them from workflow logs, providing robust protection against accidental exposure.8
+Procedure for Creating Secrets:
+1. In the newly created GitHub repository, navigate to the Settings tab.
+2. In the left sidebar, under the "Security" section, click Secrets and variables, then select Actions.10
+3. Ensure the Secrets tab is selected and click the New repository secret button.11
+4. For each credential required by the integration, enter a name and the corresponding value. Secret names cannot contain spaces and should follow an uppercase convention for clarity.9
+5. Click Add secret. Repeat this process for all credentials listed in the table below.
+
+
+Table 1: GitHub Secrets Configuration Checklist
+
+
+This table provides a definitive checklist of the secrets that must be created. Adhering to these names will ensure consistency between the GitHub configuration and the Python script that consumes them.
+Secret Name
+	Description
+	Source
+	OOMNITZA_URL
+	The base URL for the organization's Oomnitza instance API (e.g., https://<instance>.oomnitza.com).
+	Oomnitza Administrator
+	OOMNITZA_API_TOKEN
+	The API token generated within Oomnitza for authenticating API requests.
+	Oomnitza Administrator
+	INSIGHT_URL
+	The base URL for the Insight vendor API endpoint for procurement data.
+	Insight API Documentation
+	INSIGHT_API_KEY
+	The primary API key used for authenticating with the Insight API.
+	Insight Vendor Portal
+	INSIGHT_API_SECRET
+	The API secret, client secret, or secondary token required for Insight API authentication.
+	Insight Vendor Portal
+	A proactive security posture mandates not only the use of these secrets but also their lifecycle management. It is strongly recommended to establish a policy for rotating these credentials periodically (e.g., every 90 days) to minimize the risk window in the event of a compromise.8
+
+
+Section 2: Developing the Headless Python Connector
+
+
+The core of this integration is a Python script that will run in a "headless," non-interactive mode within the ephemeral environment of a GitHub Actions runner. This requires adapting the standard Oomnitza connector, which may be designed for local execution with configuration files 12, to a script that is configured entirely through environment variables.
+
+
+2.1 Script Scaffolding and Dependency Management
+
+
+The foundation of a reliable Python application is explicit dependency management. This is accomplished by creating a requirements.txt file.
+File: requirements.txt
+This file will list all external Python libraries required by the connector. For making HTTP requests to the Insight and Oomnitza APIs, the requests library is essential.
+
+
+
+
+
+
+requests==2.31.0
+
+Pinning the exact version of the dependency (==2.31.0) is a critical practice. It ensures that every workflow run uses the same version of the library, preventing unexpected breakages due to updates in dependencies and guaranteeing the reliability (NFR-2) of the integration.1
+
+
+2.2 Securely Accessing Credentials from the Environment
+
+
+To adhere to the security requirements, the Python script must read all sensitive configuration from environment variables injected by the GitHub Actions runner.1 The
+os module in Python provides the necessary functionality to access these variables.14
+Using os.environ.get('VARIABLE_NAME') is the preferred method over os.environ. The .get() method safely returns None if the environment variable is not found, preventing the script from crashing with a KeyError and allowing for graceful error handling.14
+File: src/connector.py (Initial Setup)
+
+
+Python
+
+
+
+
+import os
+import sys
+import logging
+import requests
+
+# --- 1. Configure Logging ---
+# A robust logging setup is essential for monitoring and troubleshooting.
+logging.basicConfig(
+   level=logging.INFO,
+   format='%(asctime)s - %(levelname)s - %(message)s',
+   stream=sys.stdout,
+)
+
+# --- 2. Load and Validate Credentials from Environment Variables ---
+# This is the core of the secure, headless configuration.
+logging.info("Loading credentials from environment variables.")
+
+OOMNITZA_URL = os.environ.get("OOMNITZA_URL")
+OOMNITZA_API_TOKEN = os.environ.get("OOMNITZA_API_TOKEN")
+INSIGHT_URL = os.environ.get("INSIGHT_URL")
+INSIGHT_API_KEY = os.environ.get("INSIGHT_API_KEY")
+INSIGHT_API_SECRET = os.environ.get("INSIGHT_API_SECRET")
+
+# Fail-fast validation: Ensure all required variables are present before proceeding.
+# This prevents runtime errors deep within the script's execution.
+REQUIRED_VARS = {
+   "OOMNITZA_URL": OOMNITZA_URL,
+   "OOMNITZA_API_TOKEN": OOMNITZA_API_TOKEN,
+   "INSIGHT_URL": INSIGHT_URL,
+   "INSIGHT_API_KEY": INSIGHT_API_KEY,
+   "INSIGHT_API_SECRET": INSIGHT_API_SECRET,
+}
+
+missing_vars =
+if missing_vars:
+   logging.error(f"Missing required environment variables: {', '.join(missing_vars)}. Exiting.")
+   sys.exit(1)
+
+logging.info("All required credentials loaded successfully.")
+
+# --- Main execution logic will follow ---
+
+This initial block of code establishes a fail-fast mechanism. It immediately checks for the presence of all required credentials and terminates with a clear error message if any are missing, which is invaluable for debugging configuration issues.
+
+
+2.3 Implementing the Insight API Data Fetcher
+
+
+This part of the script is responsible for fulfilling functional requirement FR-1: authenticating with the Insight API and fetching asset data.1 The function(s) developed for this purpose must handle standard REST API interactions, including:
+* Authentication: Constructing the necessary Authorization headers using the INSIGHT_API_KEY and INSIGHT_API_SECRET.
+* Pagination: Insight's API will likely return large datasets in paginated form. The script must be able to loop through these pages, collecting all relevant records until the final page is reached.
+* Filtering: The API call should be parameterized to fetch only new or updated records since the last successful run (e.g., using a date filter for the last 24 hours).
+* Error Handling: The code must gracefully handle non-200 HTTP status codes, logging errors from the Insight API (e.g., 401 Unauthorized, 403 Forbidden, 500 Internal Server Error) without crashing the entire workflow.
+
+
+2.4 Data Transformation Logic
+
+
+Requirement FR-2, "transform the fetched data into the format required by the Oomnitza API," is arguably the most business-logic-intensive part of the implementation.1 Oomnitza is not a rigid system; it features an extensible data model with custom fields and objects, allowing organizations to tailor it to their specific needs.16 This flexibility implies that the target data schema is unique to the user's Oomnitza instance.
+The official Oomnitza open-source connector repository contains a dedicated converters directory, signaling that complex data transformation is a common and expected part of building an integration.12 Therefore, the script must be designed with a flexible transformation layer that can be easily modified to accommodate specific business rules, such as data cleansing, concatenating fields, or applying default values.
+The following table defines the explicit mapping rules that will govern this transformation logic. This table serves as a technical specification for the development team and a point of verification for stakeholders.
+
+
+Table 2: Insight-to-Oomnitza Field Mapping
+
+
+Insight Source Field
+	Oomnitza Target Field
+	Transformation Logic/Notes
+	Oomnitza Data Type
+	order.purchaseOrderNumber
+	PO_NUMBER
+	Direct copy.
+	String
+	lineItem.serialNumber
+	SERIAL_NUMBER
+	Primary key for asset matching. Must be unique and present.
+	String
+	lineItem.product.sku
+	SKU
+	Direct copy.
+	String
+	lineItem.product.description
+	MODEL
+	Cleanse whitespace and truncate to 255 characters if necessary.
+	String
+	order.purchaseDate
+	PURCHASE_DATE
+	Convert from Insight's date format (e.g., ISO 8601) to YYYY-MM-DD.
+	Date
+	lineItem.unitPrice
+	PURCHASE_PRICE
+	Convert to a floating-point number. Handle currency symbols if present.
+	Currency
+	order.trackingInfo.carrier
+	SHIPPING_CARRIER
+	Direct copy.
+	String
+	order.trackingInfo.trackingNumber
+	TRACKING_NUMBER
+	Direct copy.
+	String
+	
+
+2.5 Pushing Data to the Oomnitza API
+
+
+To fulfill requirement FR-3, the script must push the transformed data to Oomnitza.1 A crucial aspect of this step is to ensure
+idempotency—meaning that running the script multiple times with the same input data does not create duplicate records.
+This is achieved by implementing a check-then-act logic:
+1. For each transformed asset record, use the primary key (e.g., SERIAL_NUMBER) to query the Oomnitza API and check if an asset with that serial number already exists.
+2. If the asset exists, perform an UPDATE operation (typically an HTTP PUT or PATCH request) with the new data.
+3. If the asset does not exist, perform a CREATE operation (an HTTP POST request).
+This approach prevents data duplication and ensures the asset inventory in Oomnitza remains accurate and clean.
+
+
+2.6 Implementing Structured Logging
+
+
+Structured logging is the primary mechanism for monitoring and troubleshooting the integration, fulfilling requirement FR-6.1 The
+logging configuration established in section 2.2 will be used throughout the script to provide a clear, human-readable audit trail of each workflow run. These logs will be captured automatically by GitHub Actions and will be visible in the workflow run's output.
+Example Log Output:
+
+
+
+
+
+
+2025-07-20 05:00:01 - INFO - Starting Insight to Oomnitza data sync.
+2025-07-20 05:00:02 - INFO - Successfully authenticated with Insight API.
+2025-07-20 05:00:05 - INFO - Fetched 42 new asset records from Insight.
+2025-07-20 05:00:05 - INFO - Transforming record for serial number SN-A1B2C3D4.
+2025-07-20 05:00:06 - INFO - Pushing 42 transformed assets to Oomnitza.
+2025-07-20 05:00:08 - INFO - Successfully created/updated 41 assets in Oomnitza.
+2025-07-20 05:00:08 - WARNING - Failed to process 1 asset. See error logs for details.
+2025-07-20 05:00:08 - ERROR - Failed to update asset SN-X9Y8Z7W6. Oomnitza API Response: 404 Not Found (Asset may have been deleted).
+2025-07-20 05:00:09 - INFO - Data sync finished successfully.
+
+
+
+Section 3: Automating the Sync with GitHub Actions
+
+
+The automation is defined in a YAML file located at .github/workflows/oomnitza-sync.yml. This file declaratively instructs GitHub Actions on when to run the job, what environment to use, and what commands to execute.
+
+
+3.1 Defining Workflow Triggers
+
+
+To meet requirements FR-4 (scheduled run) and FR-5 (manual run), the workflow will be configured to trigger on two separate events: schedule and workflow_dispatch.1
+* schedule: This trigger uses POSIX cron syntax to run the workflow at a specified time.6 It is important to note that the cron scheduler in GitHub Actions operates exclusively in the
+UTC timezone.19 Furthermore, during periods of high load on the GitHub Actions platform, the start of a scheduled job may be slightly delayed.18 This should be communicated to stakeholders, as the "less than 24 hours" efficiency goal must account for this potential variance in start time.
+* workflow_dispatch: This trigger enables the workflow to be run manually from the "Actions" tab in the GitHub repository UI, providing an on-demand sync capability.20
+File: .github/workflows/oomnitza-sync.yml (Triggers)
+
+
+YAML
+
+
+
+
+# This is the name that will appear in the GitHub Actions UI.
+name: Oomnitza-Insight Data Sync
+
+# This section defines the events that trigger the workflow.
+on:
+ # FR-4: Trigger the workflow on a recurring 24-hour schedule.
+ schedule:
+   # Runs every day at 05:00 UTC. The cron string must be quoted.
+   # The time should be chosen to be off-peak (not at the top of the hour)
+   # to reduce the chance of scheduling delays.
+   - cron: '0 5 * * *'
+
+ # FR-5: Allow the workflow to be triggered manually from the Actions tab.
+ workflow_dispatch:
+
+
+
+3.2 Configuring the Job and Runner Environment
+
+
+The workflow will consist of a single job that executes a sequence of steps on a GitHub-hosted runner. As specified in the PRD, the ubuntu-latest runner will be used, providing a clean, consistent, and maintenance-free Linux environment for each run.1
+File: .github/workflows/oomnitza-sync.yml (Job Setup)
+
+
+YAML
+
+
+
+
+jobs:
+ # Defines a single job named 'sync-data'.
+ sync-data:
+   # Specifies the type of runner the job will run on.
+   runs-on: ubuntu-latest
+
+   # The sequence of steps that make up the job.
+   steps:
+     # Step 1: Check out the repository's code so the runner can access it.
+     # Uses the official 'checkout' action. @v4 is the version tag.
+     - name: Checkout repository code
+       uses: actions/checkout@v4
+
+
+
+3.3 Setting Up Python and Installing Dependencies
+
+
+Before the script can be executed, the runner's environment must be prepared with the correct version of Python and the necessary libraries. The official actions/setup-python action is used for this purpose.22 This action also includes built-in support for caching dependencies, which significantly speeds up subsequent workflow runs by avoiding the need to re-download packages from PyPI if the
+requirements.txt file has not changed. This directly supports the project's "Efficiency" goal.1
+File: .github/workflows/oomnitza-sync.yml (Python Setup)
+
+
+YAML
+
+
+
+
+      # Step 2: Set up a specific version of Python.
+     - name: Set up Python
+       uses: actions/setup-python@v5
+       with:
+         # Specify a modern, stable version of Python.
+         python-version: '3.12'
+         # Enable dependency caching for 'pip'. This speeds up the workflow.
+         cache: 'pip'
+
+     # Step 3: Install the Python dependencies listed in requirements.txt.
+     - name: Install dependencies
+       run: pip install -r requirements.txt
+
+
+
+3.4 Executing the Connector with Injected Secrets
+
+
+This is the final and most critical step, where the Python script is executed. The env keyword is used to map the GitHub Secrets (configured in Section 1.3) to environment variables within the runner. This is the mechanism that securely provides the script with its configuration at runtime without ever exposing the credentials in the workflow file or logs.1
+File: .github/workflows/oomnitza-sync.yml (Execution Step)
+
+
+YAML
+
+
+
+
+      # Step 4: Execute the Python connector script.
+     - name: Run Oomnitza-Insight Sync
+       # The 'env' block securely injects the GitHub Secrets as environment variables.
+       # The Python script will read these variables using os.environ.get().
+       env:
+         OOMNITZA_URL: ${{ secrets.OOMNITZA_URL }}
+         OOMNITZA_API_TOKEN: ${{ secrets.OOMNITZA_API_TOKEN }}
+         INSIGHT_URL: ${{ secrets.INSIGHT_URL }}
+         INSIGHT_API_KEY: ${{ secrets.INSIGHT_API_KEY }}
+         INSIGHT_API_SECRET: ${{ secrets.INSIGHT_API_SECRET }}
+       # The command to execute the script.
+       run: python src/connector.py
+
+
+
+Section 4: Operational Runbook and Monitoring
+
+
+This section provides procedural guidance for the stakeholders and operators of the integration, such as the IT Asset Management and IT Operations teams.1
+
+
+4.1 How to Perform a Manual Data Sync
+
+
+For situations requiring an on-demand update (e.g., after a large purchase), the workflow can be triggered manually. This process fulfills requirement FR-5.1
+Procedure for Manual Trigger:
+   1. Navigate to the main page of the oomnitza-insight-connector repository on GitHub.
+   2. Click on the Actions tab located under the repository name.
+   3. In the left sidebar listing all workflows, click on Oomnitza-Insight Data Sync.
+   4. A "Run workflow" button will be visible above the list of past runs. Click this button.
+   5. A dropdown will appear, confirming the branch to run against (this should typically be the default branch, main).
+   6. Click the final green Run workflow button to initiate the sync.21
+
+
+4.2 Monitoring Workflow Runs and Logs
+
+
+Monitoring the health and output of the integration is done directly within the GitHub Actions interface, fulfilling requirement FR-6.1
+Procedure for Monitoring:
+   1. Navigate to the Actions tab of the repository.
+   2. Click on the Oomnitza-Insight Data Sync workflow.
+   3. The main panel will display a history of all workflow runs, both scheduled and manual. Each run will have a status icon (green check for success, red X for failure, yellow circle for in progress).
+   4. Click on the title of a specific run to view its details.
+   5. On the run details page, click on the sync-data job in the left sidebar.
+   6. The main panel will now display the logs for each step of the job. Expand the Run Oomnitza-Insight Sync step to view the detailed, structured output from the Python script. This is where success, failure, and warning messages can be reviewed to verify the sync's outcome.
+
+
+Section 5: Long-Term Governance and Maintenance
+
+
+A successful implementation does not end at deployment. The following practices are essential for ensuring the solution remains secure, reliable, and maintainable over its lifecycle, in line with non-functional requirements NFR-2 and NFR-3.1
+
+
+5.1 Code and Configuration Documentation
+
+
+Maintainability begins with clear documentation embedded directly in the code and configuration files.
+   * Python Script (src/connector.py): Each function should have a docstring explaining its purpose, arguments, and return values. Complex logic blocks should be preceded by comments that explain the why behind the code, not just the what.
+   * YAML Workflow (.github/workflows/oomnitza-sync.yml): Use comments (#) to explain non-obvious configurations. For example, the cron string should be commented with its human-readable equivalent: # Runs every day at 05:00 UTC.
+
+
+5.2 Dependency Management Lifecycle
+
+
+Python packages receive frequent updates for new features and security patches. A process for managing these updates is crucial.
+   * Recommendation: Enable GitHub's Dependabot for the repository. Dependabot will automatically scan the requirements.txt file for outdated dependencies and create pull requests to update them. This automates the process of keeping the integration secure and up-to-date.
+
+
+5.3 Credential Rotation Policy
+
+
+As a core security principle, all credentials used by the integration should be considered temporary.
+   * Policy: A formal policy should be established to rotate all API tokens and keys (OOMNITZA_API_TOKEN, INSIGHT_API_KEY, INSIGHT_API_SECRET) on a regular schedule. A 90-day rotation cycle is a recommended best practice that significantly minimizes the risk associated with a potentially compromised credential.8 This involves generating new credentials in the respective platforms and updating the values in the GitHub repository's secrets.
+
+
+5.4 Auditing and Access Control
+
+
+The security of the integration is tied to the security of the repository itself.
+   * Policy: Periodically (e.g., quarterly), review the list of users and teams with access to the oomnitza-insight-connector repository. Access should be governed by the Principle of Least Privilege. Only team members directly responsible for maintaining the integration should have Write or Admin permissions. All other stakeholders should have Read access if necessary.
+
+
+Conclusion
+
+
+By following this comprehensive guide, the technical team can successfully implement a fully automated, serverless data pipeline between Insight and Oomnitza. The resulting solution, built on GitHub Actions, will meet all functional and non-functional requirements outlined in the PRD.1 It will eliminate manual data entry, reduce data latency to under 24 hours, improve data integrity, and operate with a robust security posture and zero server management overhead. The long-term governance policies outlined will ensure the integration remains reliable and secure throughout its operational lifecycle, providing sustained value to the IT Asset Management, IT Operations, and Security teams.
+Works cited
+   1. PRD: Oomnitza-Insight Integration via GitHub Actions
+   2. Setting repository visibility - GitHub Docs, accessed July 18, 2025, https://docs.github.com/articles/setting-repository-visibility
+   3. Quickstart for repositories - GitHub Docs, accessed July 18, 2025, https://docs.github.com/en/repositories/creating-and-managing-repositories/quickstart-for-repositories
+   4. Creating a new repository - GitHub Docs, accessed July 18, 2025, https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-new-repository
+   5. How to create a private repository on GitHub. - iorad, accessed July 18, 2025, https://www.iorad.com/player/2046507/GitHub---How-to-create-a-private-repository-on-GitHub-
+   6. Schedule data ingestion with cron and GitHub Actions - Tinybird, accessed July 18, 2025, https://www.tinybird.co/docs/classic/get-data-in/data-operations/scheduling-with-github-actions-and-cron
+   7. www.blacksmith.sh, accessed July 18, 2025, https://www.blacksmith.sh/blog/best-practices-for-managing-secrets-in-github-actions#:~:text=GitHub%20Actions%20secrets%20are%20encrypted,be%20exposed%20in%20your%20code.
+   8. Best Practices for Managing Secrets in GitHub Actions - Blacksmith, accessed July 18, 2025, https://www.blacksmith.sh/blog/best-practices-for-managing-secrets-in-github-actions
+   9. How To Use GitHub Actions Secrets To Hide Sensitive Data? - Kinsta, accessed July 18, 2025, https://kinsta.com/blog/github-actions-secret/
+   10. Using secrets in GitHub Actions, accessed July 18, 2025, https://docs.github.com/actions/security-guides/using-secrets-in-github-actions
+   11. GitHub Actions secrets - Graphite, accessed July 18, 2025, https://graphite.dev/guides/github-actions-secrets
+   12. oomnitza-connector/README.md at master - GitHub, accessed July 18, 2025, https://github.com/Oomnitza/oomnitza-connector/blob/master/README.md?plain=1
+   13. How to Setup Python Action in GitHub Actions? - Workflow Hub - CICube, accessed July 18, 2025, https://cicube.io/workflow-hub/actions-setup-python/
+   14. Access environment variable values in Python - GeeksforGeeks, accessed July 18, 2025, https://www.geeksforgeeks.org/python/access-environment-variable-values-in-python/
+   15. Best Practices for Python Env Variables - Dagster, accessed July 18, 2025, https://dagster.io/blog/python-environment-variables
+   16. Technology Asset Database - Oomnitza, accessed July 18, 2025, https://www.oomnitza.com/database/
+   17. Oomnitza Modern IT Asset Management (ITAM), accessed July 18, 2025, https://www.oomnitza.com/blog/oomnitza-modern-it-asset-management/
+   18. Free Cron Jobs with Github Actions - Anshuman Bhardwaj, accessed July 18, 2025, https://www.theanshuman.dev/articles/free-cron-jobs-with-github-actions-31d6
+   19. How to run cron jobs in github action for a particular day and time - Stack Overflow, accessed July 18, 2025, https://stackoverflow.com/questions/75166565/how-to-run-cron-jobs-in-github-action-for-a-particular-day-and-time
+   20. GitHub Actions workflow_dispatch event - Graphite, accessed July 18, 2025, https://graphite.dev/guides/github-actions-workflow-dispatch
+   21. Manually running a workflow - GitHub Docs, accessed July 18, 2025, https://docs.github.com/en/actions/how-tos/managing-workflow-runs-and-deployments/managing-workflow-runs/manually-running-a-workflow
+   22. actions/setup-python: Set up your GitHub Actions workflow ... - GitHub, accessed July 18, 2025, https://github.com/actions/setup-python
