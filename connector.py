@@ -5,6 +5,10 @@ monkey.patch_all()
 import argparse
 import logging
 import sys
+import os
+
+# Add the current directory to Python path to ensure local modules can be imported
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from constants import (MODE_CLIENT_INITIATED_UPLOAD, MODE_CLOUD_INITIATED_UPLOAD,
                        MODE_GENERATE_INI_TEMPLATE, MODE_VERSION)
