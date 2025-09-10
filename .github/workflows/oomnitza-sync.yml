@@ -99,6 +99,8 @@ jobs:
           INSIGHT_TRACKING_DATA: ${{ secrets.INSIGHT_TRACKING_DATA }}
           INSIGHT_ORDER_CREATION_DATE_FROM: ${{ steps.dates.outputs.DATE_FROM }}
           INSIGHT_ORDER_CREATION_DATE_TO: ${{ steps.dates.outputs.DATE_TO }}
+          # Add current directory to Python path
+          PYTHONPATH: .
         shell: bash
         run: |
           ARGS=""
