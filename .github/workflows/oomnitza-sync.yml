@@ -110,6 +110,8 @@ jobs:
           echo "Current directory: $(pwd)"
           echo "Directory contents:"
           ls -la
+          echo "Checking lib directory specifically:"
+          ls -la lib/
           echo "Python version:"
           python --version
           echo "Python path before modification:"
@@ -124,6 +126,9 @@ jobs:
           # Test imports before running
           echo "Testing imports:"
           python -c "import constants; print('constants import: OK')" || echo "constants import: FAILED"
+          echo "Testing lib module specifically:"
+          python -c "import lib; print('lib import: OK')" || echo "lib import: FAILED"
+          python -c "import lib.config; print('lib.config import: OK')" || echo "lib.config import: FAILED"
           python -c "from lib import config; print('lib.config import: OK')" || echo "lib.config import: FAILED"
           python -c "from lib import version; print('lib.version import: OK')" || echo "lib.version import: FAILED"
           
