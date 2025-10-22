@@ -135,11 +135,14 @@ class Connector(AssetsConnector):
 
             # POST is required (GET with body unsupported)
             response = self.post(self.get_sales_order_status_api, data=body_data)
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("Request Payload: %s", json.dumps(body_data))
-                logger.debug("Response Status Code: %s", response.status_code)
-                logger.debug("Response Text: %s", response.text)
-            yield response_to_object(response.text)
+            logger.info("Request Payload: %s", json.dumps(body_data))
+            logger.info("Response Status Code: %s", response.status_code)
+            logger.info("Response Text: %s", response.text)
+            
+            response_obj = response_to_object(response.text)
+            logger.info("Parsed response type: %s", type(response_obj))
+            logger.info("Parsed response: %s", response_obj)
+            yield response_obj
 
     @staticmethod
     def attach_order_headers(order_header: List[Dict[str, Any]], final_dict: Dict[str, Any]):
@@ -183,17 +186,33 @@ class Connector(AssetsConnector):
                                         "Billing Information not added to dict as only one is expected per item in Order line item.")
 
     def create_insight_response_dict(self, response):
+        logger.info("Processing response in create_insight_response_dict: %s", response)
+        logger.info("Response type: %s", type(response))
+        
+        # Handle case where response is a string (failed parsing)
+        if isinstance(response, str):
+            logger.error("Response is a string, not a dictionary. Raw response: %s", response)
+            return
+        
+        # Handle case where response doesn't have expected structure
+        if not isinstance(response, dict):
+            logger.error("Response is not a dictionary. Type: %s, Value: %s", type(response), response)
+            return
+            
         for orders in response.get("StatusOrderResponse", []):
-            for order in orders.get('Order', []):
-                order_header = order.get('OrderHeader', [])
-                order_tracking_info = order.get('Tracking', [])
-                ignore_keys = ["Delivery", "SerialNumbers", "BillingInformation"]
-                output_dict = {}
+            order = orders.get('Order', {})
+            if not order:
+                continue
+                
+            order_header = order.get('OrderHeader', [])
+            order_tracking_info = order.get('Tracking', [])
+            ignore_keys = ["Delivery", "SerialNumbers", "BillingInformation"]
+            output_dict = {}
 
-                self.attach_order_headers(order_header, output_dict)
-                items = self.attach_order_line_items_and_tracking(order, order_tracking_info, output_dict, ignore_keys)
-                for result in items:
-                    yield result
+            self.attach_order_headers(order_header, output_dict)
+            items = self.attach_order_line_items_and_tracking(order, order_tracking_info, output_dict, ignore_keys)
+            for result in items:
+                yield result
 
     def _load_records(self, *a, **kw):
         if not self.client_key or not self.client_secret:
