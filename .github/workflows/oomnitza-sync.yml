@@ -111,11 +111,65 @@ jobs:
           
           # Run the connector
           python connector.py upload insight --ini config.ini $ARGS
-      - name: Archive logs (optional)
+      - name: Prepare timestamped logs
+        if: always()
+        shell: bash
+        run: |
+          # Create logs directory
+          mkdir -p logs
+          
+          # Generate timestamp
+          TIMESTAMP=$(date -u +%Y%m%d-%H%M%S)
+          RUN_ID="${{ github.run_id }}"
+          DATE_RANGE="${{ steps.dates.outputs.DATE_FROM }}_to_${{ steps.dates.outputs.DATE_TO }}"
+          
+          # Copy logs with timestamps and metadata
+          if [ -f info.log ]; then
+            cp info.log "logs/info-${DATE_RANGE}-${TIMESTAMP}-run${RUN_ID}.log"
+            echo "✅ Copied info.log"
+          else
+            echo "⚠️ info.log not found"
+            echo "No info.log generated" > "logs/info-${DATE_RANGE}-${TIMESTAMP}-run${RUN_ID}.log"
+          fi
+          
+          if [ -f errors.log ]; then
+            cp errors.log "logs/errors-${DATE_RANGE}-${TIMESTAMP}-run${RUN_ID}.log"
+            echo "✅ Copied errors.log"
+          else
+            echo "⚠️ errors.log not found"
+            echo "No errors.log generated" > "logs/errors-${DATE_RANGE}-${TIMESTAMP}-run${RUN_ID}.log"
+          fi
+          
+          # Create metadata file
+          cat > "logs/metadata-${DATE_RANGE}-${TIMESTAMP}-run${RUN_ID}.txt" << EOF
+          Oomnitza Insight Integration - Run Metadata
+          ============================================
+          Run ID: ${{ github.run_id }}
+          Run Number: ${{ github.run_number }}
+          Workflow: ${{ github.workflow }}
+          Timestamp: ${TIMESTAMP} UTC
+          Triggered By: ${{ github.event_name }}
+          Actor: ${{ github.actor }}
+          
+          Date Range:
+          - From: ${{ steps.dates.outputs.DATE_FROM }}
+          - To: ${{ steps.dates.outputs.DATE_TO }}
+          
+          Mode: ${{ github.event.inputs.test_mode == 'true' && 'Test Mode (No Upload)' || 'Production Mode' }}
+          
+          Repository: ${{ github.repository }}
+          Branch: ${{ github.ref_name }}
+          Commit: ${{ github.sha }}
+          EOF
+          
+          echo "📁 Log files prepared:"
+          ls -lh logs/
+          
+      - name: Upload logs as artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: connector-logs
-          path: |
-            info.log
-            errors.log
+          name: connector-logs-${{ github.run_id }}
+          path: logs/
+          retention-days: 90
+          if-no-files-found: warn
