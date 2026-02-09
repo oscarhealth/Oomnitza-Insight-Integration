@@ -85,6 +85,7 @@ jobs:
           insight_url = placeholder
           EOF
       - name: Run connector (manual or scheduled)
+        id: sync_step
         timeout-minutes: 10  # Main sync step timeout
         env:
           # Oomnitza
@@ -109,8 +110,33 @@ jobs:
           # Set Python path to include current directory for local module imports
           export PYTHONPATH="$(pwd):${PYTHONPATH}"
           
-          # Run the connector
+          # Run the connector and capture output
+          set +e  # Don't exit immediately on error
           python connector.py upload insight --ini config.ini $ARGS
+          EXIT_CODE=$?
+          set -e
+          
+          # Check for authentication errors in logs
+          if [ -f errors.log ] && grep -q "401\|Unauthorized\|Authentication failure" errors.log; then
+            echo "::error::❌ Authentication failed - Invalid or expired credentials"
+            echo "AUTH_FAILED=true" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          # Check for other critical errors
+          if [ -f errors.log ] && grep -q "Error loading records\|Error syncing data" errors.log; then
+            echo "::error::❌ Sync failed - Check error logs for details"
+            echo "SYNC_FAILED=true" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          # Exit with the connector's exit code
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "::error::❌ Connector failed with exit code $EXIT_CODE"
+            exit $EXIT_CODE
+          fi
+          
+          echo "✅ Sync completed successfully"
       - name: Prepare timestamped logs
         if: always()
         shell: bash
@@ -173,3 +199,105 @@ jobs:
           path: logs/
           retention-days: 90
           if-no-files-found: warn
+          
+      - name: Notify on failure (scheduled runs)
+        if: failure() && github.event_name == 'schedule'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const logsUrl = `${runUrl}/artifacts`;
+            
+            const issueBody = `## ⚠️ Scheduled Sync Failed
+            
+            **Run ID:** ${context.runId}
+            **Date Range:** ${{ steps.dates.outputs.DATE_FROM }} to ${{ steps.dates.outputs.DATE_TO }}
+            **Triggered:** ${new Date().toISOString()}
+            
+            ### Failure Details
+            ${context.payload.workflow_run?.conclusion === 'failure' ? '- Workflow failed' : ''}
+            ${{ steps.sync_step.outputs.AUTH_FAILED == 'true' && '- ❌ **Authentication failed** - Invalid or expired Insight API credentials' || '' }}
+            ${{ steps.sync_step.outputs.SYNC_FAILED == 'true' && '- ❌ **Sync failed** - Error loading or processing data' || '' }}
+            
+            ### Actions Required
+            ${${{ steps.sync_step.outputs.AUTH_FAILED == 'true' }} ? `
+            1. Verify Insight API credentials in GitHub Secrets:
+               - \`INSIGHT_CLIENT_ID\`
+               - \`INSIGHT_CLIENT_KEY\`
+               - \`INSIGHT_CLIENT_SECRET\`
+            2. Check if API account is active
+            3. Re-run workflow after updating credentials
+            ` : `
+            1. Check error logs in [artifacts](${logsUrl})
+            2. Review [workflow run](${runUrl}) for details
+            3. Fix the underlying issue
+            4. Re-run the workflow
+            `}
+            
+            ### Links
+            - [Workflow Run](${runUrl})
+            - [Download Logs](${logsUrl})
+            - [Repository Secrets](https://github.com/${context.repo.owner}/${context.repo.repo}/settings/secrets/actions)
+            
+            ---
+            *This issue was automatically created by the Oomnitza Insight Integration workflow.*
+            `;
+            
+            // Create an issue
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Oomnitza Sync Failed - ${new Date().toISOString().split('T')[0]}`,
+              body: issueBody,
+              labels: ['automated', 'sync-failure', 'urgent']
+            });
+            
+      - name: Add job summary
+        if: always()
+        shell: bash
+        run: |
+          echo "## 📊 Oomnitza Insight Sync Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Date Range:** ${{ steps.dates.outputs.DATE_FROM }} to ${{ steps.dates.outputs.DATE_TO }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Mode:** ${{ github.event.inputs.test_mode == 'true' && 'Test Mode (No Upload)' || 'Production Mode' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.sync_step.outputs.AUTH_FAILED }}" = "true" ]; then
+            echo "### ❌ Authentication Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Invalid or expired Insight API credentials." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Action Required:**" >> $GITHUB_STEP_SUMMARY
+            echo "1. Update GitHub Secrets with valid credentials" >> $GITHUB_STEP_SUMMARY
+            echo "2. Verify API account is active" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.sync_step.outputs.SYNC_FAILED }}" = "true" ]; then
+            echo "### ❌ Sync Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Error occurred during data synchronization." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Action Required:**" >> $GITHUB_STEP_SUMMARY
+            echo "1. Check error logs in artifacts" >> $GITHUB_STEP_SUMMARY
+            echo "2. Review workflow logs for details" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ job.status }}" = "success" ]; then
+            echo "### ✅ Sync Completed Successfully" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Data synchronized from Insight to Oomnitza." >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📁 Logs" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f errors.log ] && [ -s errors.log ]; then
+            echo "<details>" >> $GITHUB_STEP_SUMMARY
+            echo "<summary>⚠️ Error Log (click to expand)</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -50 errors.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No errors logged ✅" >> $GITHUB_STEP_SUMMARY
+          fi
