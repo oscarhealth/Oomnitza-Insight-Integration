@@ -91,8 +91,13 @@ class Connector(AssetsConnector):
         }
 
         logger.info(f"Requesting OAuth token from: {token_url}")
+        logger.info(f"OAuth debug: client_key length={len(client_key)}, first3='{client_key[:3]}', client_secret length={len(client_secret)}, first3='{client_secret[:3]}'")
         # Use base connector's verification behavior
-        json_response = self.post(token_url, data={'grant_type': 'client_credentials'}, headers=basic_auth_headers, post_as_json=False)
+        try:
+            json_response = self.post(token_url, data={'grant_type': 'client_credentials'}, headers=basic_auth_headers, post_as_json=False)
+        except Exception as e:
+            logger.error(f"OAuth request failed. Response body if available: {getattr(e.response, 'text', 'N/A') if hasattr(e, 'response') else 'N/A'}")
+            raise
         dict_response = response_to_object(json_response.text)
 
         self.access_token = dict_response.get('access_token', '')
