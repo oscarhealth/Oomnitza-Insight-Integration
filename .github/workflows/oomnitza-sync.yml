@@ -98,6 +98,7 @@ jobs:
           INSIGHT_CLIENT_SECRET: ${{ secrets.INSIGHT_CLIENT_SECRET }}
           INSIGHT_CLIENT_ID: ${{ secrets.INSIGHT_CLIENT_ID }}
           INSIGHT_TRACKING_DATA: ${{ secrets.INSIGHT_TRACKING_DATA }}
+          INSIGHT_OAUTH_URL: ${{ secrets.INSIGHT_OAUTH_URL }}
           INSIGHT_ORDER_CREATION_DATE_FROM: ${{ steps.dates.outputs.DATE_FROM }}
           INSIGHT_ORDER_CREATION_DATE_TO: ${{ steps.dates.outputs.DATE_TO }}
         shell: bash

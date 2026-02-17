@@ -83,14 +83,16 @@ class Connector(AssetsConnector):
         # Create the base64 client_id and client_secret token and grab an Access Token
         token = f"{client_key}:{client_secret}"
         base64_token = base64.b64encode(token.encode()).decode()
-        token_url = 'https://insight-prod.apigee.net/oauth/client_credential/accesstoken?grant_type=client_credentials'
+        default_oauth_url = 'https://insight-prod-na.prod.apimanagement.us20.hana.ondemand.com:443/oauth/token'
+        token_url = os.environ.get('INSIGHT_OAUTH_URL') or self.settings.get('oauth_url', default_oauth_url)
         basic_auth_headers = {
             'Authorization': f'Basic {base64_token}',
             'Content-Type': 'application/x-www-form-urlencoded'
         }
 
+        logger.info(f"Requesting OAuth token from: {token_url}")
         # Use base connector's verification behavior
-        json_response = self.post(token_url, data={}, headers=basic_auth_headers, post_as_json=False)
+        json_response = self.post(token_url, data={'grant_type': 'client_credentials'}, headers=basic_auth_headers, post_as_json=False)
         dict_response = response_to_object(json_response.text)
 
         self.access_token = dict_response.get('access_token', '')
