@@ -87,16 +87,26 @@ class Connector(AssetsConnector):
         token_url = os.environ.get('INSIGHT_OAUTH_URL') or self.settings.get('oauth_url', default_oauth_url)
         basic_auth_headers = {
             'Authorization': f'Basic {base64_token}',
-            'Content-Type': 'application/x-www-form-urlencoded'
         }
 
         logger.info(f"Requesting OAuth token from: {token_url}")
         logger.info(f"OAuth debug: client_key length={len(client_key)}, first3='{client_key[:3]}', client_secret length={len(client_secret)}, first3='{client_secret[:3]}'")
-        # Use base connector's verification behavior
+
+        import requests as req_lib
         try:
-            json_response = self.post(token_url, data={'grant_type': 'client_credentials'}, headers=basic_auth_headers, post_as_json=False)
+            oauth_url_with_grant = f"{token_url}?grant_type=client_credentials"
+            logger.info(f"OAuth attempt: GET-style grant_type in URL, no body, no Content-Type")
+            raw_response = req_lib.post(oauth_url_with_grant, headers=basic_auth_headers, verify=self.get_verification())
+            logger.info(f"OAuth response status={raw_response.status_code}, body={raw_response.text[:500]}")
+            if raw_response.status_code != 200:
+                logger.info(f"OAuth fallback: trying with grant_type in body")
+                basic_auth_headers['Content-Type'] = 'application/x-www-form-urlencoded'
+                raw_response = req_lib.post(token_url, data='grant_type=client_credentials', headers=basic_auth_headers, verify=self.get_verification())
+                logger.info(f"OAuth fallback response status={raw_response.status_code}, body={raw_response.text[:500]}")
+            raw_response.raise_for_status()
+            json_response = raw_response
         except Exception as e:
-            logger.error(f"OAuth request failed. Response body if available: {getattr(e.response, 'text', 'N/A') if hasattr(e, 'response') else 'N/A'}")
+            logger.error(f"OAuth request failed. Response body if available: {getattr(e, 'response', None) and e.response.text or 'N/A'}")
             raise
         dict_response = response_to_object(json_response.text)
 
