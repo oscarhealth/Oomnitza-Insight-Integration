@@ -83,19 +83,22 @@ class Connector(AssetsConnector):
         # Create the base64 client_id and client_secret token and grab an Access Token
         token = f"{client_key}:{client_secret}"
         base64_token = base64.b64encode(token.encode()).decode()
-        default_oauth_url = 'https://insight-prod-na.prod.apimanagement.us20.hana.ondemand.com:443/oauth/token'
-        token_url = os.environ.get('INSIGHT_OAUTH_URL') or self.settings.get('oauth_url', default_oauth_url)
 
-        logger.info(f"Requesting OAuth token from: {token_url}")
         logger.info(f"OAuth debug: client_key length={len(client_key)}, first3='{client_key[:3]}', client_secret length={len(client_secret)}, first3='{client_secret[:3]}'")
-        logger.info(f"OAuth debug: base64_token='{base64_token[:12]}...{base64_token[-6:]}'")
+        logger.info(f"OAuth debug: base64_token='{base64_token}'")
 
         import requests as req_lib
+        import subprocess
+
+        url_no_port = 'https://insight-prod-na.prod.apimanagement.us20.hana.ondemand.com/oauth/token'
+        url_with_port = 'https://insight-prod-na.prod.apimanagement.us20.hana.ondemand.com:443/oauth/token'
+
         attempts = [
-            ("new creds, grant_type in URL, no body", token_url + "?grant_type=client_credentials", None, {'Authorization': f'Basic {base64_token}'}),
-            ("new creds, grant_type in body", token_url, 'grant_type=client_credentials', {'Authorization': f'Basic {base64_token}', 'Content-Type': 'application/x-www-form-urlencoded'}),
-            ("old creds, grant_type in URL", token_url + "?grant_type=client_credentials", None, {'Authorization': 'Basic VnlpbTEwMnRKWk5nMmtEaGpYU1dIYTlNbDlPUVJPVTU6RDhxNnRuMzBsSWdtaFpLWg=='}),
-            ("old creds, grant_type in body", token_url, 'grant_type=client_credentials', {'Authorization': 'Basic VnlpbTEwMnRKWk5nMmtEaGpYU1dIYTlNbDlPUVJPVTU6RDhxNnRuMzBsSWdtaFpLWg==', 'Content-Type': 'application/x-www-form-urlencoded'}),
+            ("SOP exact: no port, no body, no grant_type", url_no_port, None, {'Authorization': f'Basic {base64_token}'}),
+            ("SOP + grant_type query: no port", url_no_port + "?grant_type=client_credentials", None, {'Authorization': f'Basic {base64_token}'}),
+            ("SOP + grant_type body: no port", url_no_port, 'grant_type=client_credentials', {'Authorization': f'Basic {base64_token}', 'Content-Type': 'application/x-www-form-urlencoded'}),
+            ("with port, no body", url_with_port, None, {'Authorization': f'Basic {base64_token}'}),
+            ("with port, grant_type body", url_with_port, 'grant_type=client_credentials', {'Authorization': f'Basic {base64_token}', 'Content-Type': 'application/x-www-form-urlencoded'}),
         ]
         last_error = None
         for desc, url, body, hdrs in attempts:
@@ -111,7 +114,17 @@ class Connector(AssetsConnector):
                 last_error = e
                 logger.error(f"OAuth exception [{desc}]: {e}")
         else:
-            logger.error("All OAuth attempts failed")
+            logger.info("All Python attempts failed. Trying raw curl...")
+            try:
+                curl_cmd = f'curl -s -w "\\nHTTP_CODE:%{{http_code}}" -X POST -H "Authorization: Basic {base64_token}" {url_no_port}'
+                result = subprocess.run(curl_cmd, shell=True, capture_output=True, text=True, timeout=30)
+                logger.info(f"curl (no port, no body): stdout={result.stdout[:500]}, stderr={result.stderr[:200]}")
+
+                curl_cmd2 = f'curl -s -w "\\nHTTP_CODE:%{{http_code}}" -X POST -H "Authorization: Basic {base64_token}" -d "grant_type=client_credentials" {url_no_port}'
+                result2 = subprocess.run(curl_cmd2, shell=True, capture_output=True, text=True, timeout=30)
+                logger.info(f"curl (no port, with body): stdout={result2.stdout[:500]}, stderr={result2.stderr[:200]}")
+            except Exception as ce:
+                logger.error(f"curl failed: {ce}")
             raise last_error or Exception("All OAuth attempts failed")
         dict_response = response_to_object(json_response.text)
 
